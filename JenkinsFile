@@ -1,0 +1,46 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'version', choices: ['1.0', '2.0'], description: '选择要部署的版本')
+        choice(name: 'environment', choices: ['old', 'new'], description: '选择要部署到的环境')
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                // 编译
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Deploy') {
+            //切换新版本部署
+            when {
+                expression {
+                    params.environment == 'new'
+                }
+            }
+            steps {
+                sshagent(['my-ssh-key']) {
+                    sh 'ssh user@new-server "sudo systemctl stop old-app"
+                    sh 'scp target/my-app.jar user@new-server:/opt/new-app'
+                    sh 'ssh user@new-server "sudo systemctl start new-app"
+                }
+            }
+            //切换老版本部署
+            when {
+                expression {
+                    params.environment == 'old'
+                }
+            }
+            steps {
+                sshagent(['my-ssh-key']) {
+                    sh 'ssh user@old-server "sudo systemctl stop new-app"
+                    sh 'scp target/my-app.jar user@old-server:/opt/old-app'
+                    sh 'ssh user@old-server "sudo systemctl start old-app"
+                }
+            }
+        }
+    }
+}
